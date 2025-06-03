@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Login Estudante</title>
+  <style>
+    body {
+      background: url('IMG_4199.PNG') center center fixed;
+      background-size: cover;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    form {
+      background: rgba(255,255,255,0.95);
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    h2 {
+      text-align: center;
+      color: #4a6fa5;
+    }
+
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      margin-top: 20px;
+      width: 100%;
+      padding: 12px;
+      background-color: #4a6fa5;
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background-color: #395a85;
+    }
+  </style>
+</head>
+<body>
+  <form action="login_estudante.php" method="POST">
+    <h2>Login Estudante</h2>
+    <label>E-mail:</label>
+    <input type="email" name="email" required>
+    <label>Senha:</label>
+    <input type="password" name="senha" required>
+    <button type="submit">Entrar</button>
+    <button type="button" onclick="window.location.href='cadastro_estudante.html'" class="extra-button">Cadastra-se como estudante</button>
+    <button type="button" onclick="window.location.href='index.html'" class="extra-button">Voltar à página inicial</button>
+  </form>
+</body>
+</html>
