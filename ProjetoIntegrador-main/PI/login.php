@@ -4,6 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once 'config.php';
+require_once 'functions.php';
 
 $type = isset($_GET['type']) ? $_GET['type'] : 'estudante';
 $error = '';
@@ -24,56 +25,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Por favor, preencha todos os campos.";
         error_log("Erro de login: Campos vazios.");
     } else {
-        $conn = getDBConnection();
-        
-        if ($conn) {
-            error_log("Conexão com o banco de dados estabelecida.");
-            $table = ($userType === 'tutor') ? 'tutores' : 'estudantes';
-            error_log("Buscando usuário na tabela: " . $table . " com email: " . $email);
+        try {
+            $conn = getDBConnection();
+            
+            if ($conn) {
+                error_log("Conexão com o banco de dados estabelecida.");
+                $table = ($userType === 'tutor') ? 'tutores' : 'estudantes';
+                error_log("Buscando usuário na tabela: " . $table . " com email: " . $email);
 
-            $stmt = $conn->prepare("SELECT id, nome, senha, email FROM $table WHERE email = ?");
-            $stmt->execute([$email]);
-            $user = $stmt->fetch();
+                $stmt = $conn->prepare("SELECT id, nome, senha, email FROM $table WHERE email = ?");
+                $stmt->execute([$email]);
+                $user = $stmt->fetch();
 
-            error_log("Dados do usuário buscado para email " . $email . ": " . print_r($user, true));
+                error_log("Dados do usuário buscado para email " . $email . ": " . print_r($user, true));
 
-            error_log("Usuário encontrado: " . ($user ? "Sim" : "Não"));
+                error_log("Usuário encontrado: " . ($user ? "Sim" : "Não"));
 
-            if ($user) {
-                error_log("Verificando senha para " . $user['email']);
-                if (password_verify($senha, $user['senha'])) {
-                    error_log("Verificação de senha: Bem-sucedida.");
-                    error_log("Login bem-sucedido para " . $userType . ": " . $user['nome']);
-                    
-                    if ($userType === 'estudante' || $userType === 'student') {
-                        $_SESSION['user_type'] = 'estudante';
+                if ($user) {
+                    error_log("Verificando senha para " . $user['email']);
+                    if (password_verify($senha, $user['senha'])) {
+                        error_log("Verificação de senha: Bem-sucedida.");
+                        error_log("Login bem-sucedido para " . $userType . ": " . $user['nome']);
+                        
+                        $_SESSION['user_type'] = $userType;
                         $_SESSION['user_id'] = $user['id'];
                         $_SESSION['user_name'] = $user['nome'];
-                        error_log("Sessão definida para estudante. Redirecionando...");
-                        header('Location: dashboard.php');
-                        exit;
-                    } elseif ($userType === 'tutor') {
-                        $_SESSION['user_type'] = 'tutor';
-                        $_SESSION['user_id'] = $user['id'];
-                        $_SESSION['user_name'] = $user['nome'];
-                        error_log("Sessão definida para tutor. Redirecionando...");
+
+                        // Registrar login na tabela login_history
+                        $session_id = session_id();
+                        $ip_address = $_SERVER['REMOTE_ADDR'];
+                        $stmt_log = $conn->prepare("INSERT INTO login_history (user_id, user_type, session_id, ip_address) VALUES (?, ?, ?, ?)");
+                        
+                        if ($stmt_log->execute([$user["id"], $userType, $session_id, $ip_address])) {
+                            error_log("LOGIN_HISTORY: User ID " . $user["id"] . " (" . $userType . ") logado com sucesso.");
+                        } else {
+                            error_log("LOGIN_HISTORY ERROR: Falha ao inserir login para user ID " . $user["id"] . " (" . $userType . "): " . implode(" ", $stmt_log->errorInfo()));
+                        }
+                        $stmt_log->closeCursor();
+
+                        error_log("Sessão definida para " . $userType . ". Redirecionando...");
                         header('Location: dashboard.php');
                         exit;
                     } else {
-                         $error = "Tipo de usuário inválido.";
-                         error_log("Erro de login: Tipo de usuário inválido recebido: " . $userType);
+                        $error = "E-mail ou senha inválidos."; // Mensagem genérica por segurança
+                        error_log("Erro de login: Senha incorreta para email: " . $email);
                     }
                 } else {
                     $error = "E-mail ou senha inválidos."; // Mensagem genérica por segurança
-                    error_log("Erro de login: Senha incorreta para email: " . $email);
+                    error_log("Erro de login: Usuário não encontrado com email: " . $email);
                 }
             } else {
-                $error = "E-mail ou senha inválidos."; // Mensagem genérica por segurança
-                error_log("Erro de login: Usuário não encontrado com email: " . $email);
+                $error = "Erro ao conectar com o banco de dados.";
+                error_log("Erro de login: Falha na conexão com o banco de dados.");
             }
-        } else {
-             $error = "Erro ao conectar com o banco de dados.";
-             error_log("Erro de login: Falha na conexão com o banco de dados.");
+        } catch (PDOException $e) {
+            error_log("DATABASE ERROR in login.php: " . $e->getMessage());
+            $error = "Erro interno do servidor. Tente novamente mais tarde.";
         }
     }
 }

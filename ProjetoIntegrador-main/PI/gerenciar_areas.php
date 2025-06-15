@@ -102,13 +102,13 @@ $areas_disponiveis = $stmt->fetchAll();
 
             <?php if (hasFlashMessage('success')): ?>
                 <div class="alert alert-success">
-                    <?php echo getFlashMessage('success'); ?>
+                    <?php $msg = getFlashMessage(); echo htmlspecialchars($msg['message'] ?? ''); ?>
                 </div>
             <?php endif; ?>
 
             <?php if (hasFlashMessage('error')): ?>
                 <div class="alert alert-error">
-                    <?php echo getFlashMessage('error'); ?>
+                    <?php $msg = getFlashMessage(); echo htmlspecialchars($msg['message'] ?? ''); ?>
                 </div>
             <?php endif; ?>
 
@@ -123,8 +123,8 @@ $areas_disponiveis = $stmt->fetchAll();
                                 <div class="card">
                                     <div class="grid grid-2">
                                         <div>
-                                            <h4><?php echo htmlspecialchars($area['nome']); ?></h4>
-                                            <p><?php echo htmlspecialchars($area['descricao']); ?></p>
+                                            <h4><?php echo htmlspecialchars($area['nome'] ?? ''); ?></h4>
+                                            <p><?php echo htmlspecialchars($area['descricao'] ?? ''); ?></p>
                                         </div>
                                         <div style="text-align: right;">
                                             <form method="POST" style="display: inline;">
@@ -151,8 +151,8 @@ $areas_disponiveis = $stmt->fetchAll();
                                 <div class="card">
                                     <div class="grid grid-2">
                                         <div>
-                                            <h4><?php echo htmlspecialchars($area['nome']); ?></h4>
-                                            <p><?php echo htmlspecialchars($area['descricao']); ?></p>
+                                            <h4><?php echo htmlspecialchars($area['nome'] ?? ''); ?></h4>
+                                            <p><?php echo htmlspecialchars($area['descricao'] ?? ''); ?></p>
                                         </div>
                                         <div style="text-align: right;">
                                             <form method="POST" style="display: inline;">

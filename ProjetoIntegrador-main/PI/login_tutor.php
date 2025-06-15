@@ -102,9 +102,9 @@
   </style>
 </head>
 <body>
-  <form action="verifica_login_tutor.php" method="POST">
+  <form action="login.php" method="POST">
     <h2>Login de Tutor</h2>
-
+    <input type="hidden" name="type" value="tutor">
     <label for="email">E-mail:</label>
     <input type="email" id="email" name="email" required placeholder="Digite seu e-mail">
 

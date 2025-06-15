@@ -4,6 +4,46 @@
  */
 
 /**
+ * Obtém uma conexão com o banco de dados
+ * @return PDO Objeto de conexão PDO
+ */
+function getDBConnection() {
+    try {
+        $conn = new PDO(
+            "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8",
+            DB_USER,
+            DB_PASS,
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false
+            ]
+        );
+        return $conn;
+    } catch(PDOException $e) {
+        die("Erro na conexão: " . $e->getMessage());
+    }
+}
+
+/**
+ * Sanitiza uma string para uso seguro
+ * @param string $data String a ser sanitizada
+ * @return string String sanitizada
+ */
+function sanitizeInput($data) {
+    if (is_array($data)) {
+        return array_map('sanitizeInput', $data);
+    }
+    if ($data === null) {
+        return '';
+    }
+    $data = trim($data);
+    $data = stripslashes($data);
+    $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
+    return $data;
+}
+
+/**
  * Define uma mensagem flash
  * @param string $type Tipo da mensagem (success, error, warning, info)
  * @param string $message Conteúdo da mensagem
@@ -95,6 +135,9 @@ function verifyCSRFToken($token) {
  * @return string String sanitizada
  */
 function h($str) {
+    if ($str === null) {
+        return '';
+    }
     return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
 }
 

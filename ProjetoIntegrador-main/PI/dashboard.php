@@ -390,7 +390,7 @@ if ($user_type === 'tutor') {
                     </div>
                     <div class="card">
                         <h3>Média de Avaliações</h3>
-                        <p class="stat"><?php echo number_format($avaliacoes['media'], 1); ?>/5</p>
+                        <p class="stat"><?php echo $avaliacoes['media'] ? number_format($avaliacoes['media'], 1) : '0.0'; ?>/5</p>
                         <p style="text-align: center; color: var(--text-color);">
                             <?php echo $avaliacoes['total']; ?> avaliações
                         </p>
