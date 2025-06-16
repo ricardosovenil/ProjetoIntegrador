@@ -15,8 +15,8 @@ function notifyNewAppointment($appointment_id) {
     
     // Buscar informações do agendamento
     $stmt = $conn->prepare("
-        SELECT a.*, t.nome as tutor_nome, t.email as tutor_email,
-               e.nome as estudante_nome, e.email as estudante_email
+        SELECT a.*, t.nome as tutor_nome, t.email as tutor_email, t.id as tutor_id,
+               e.nome as estudante_nome, e.email as estudante_email, e.id as estudante_id
         FROM agendamentos a
         JOIN tutores t ON a.tutor_id = t.id
         JOIN estudantes e ON a.estudante_id = e.id
@@ -43,6 +43,10 @@ function notifyNewAppointment($appointment_id) {
         <p>Acesse o sistema para aceitar ou recusar esta solicitação.</p>
     ";
 
+    // Notificação in-app para o tutor
+    $notificationTutorMessage = "Você recebeu uma nova solicitação de agendamento de " . htmlspecialchars($appointment['estudante_nome']) . " para o dia " . date('d/m/Y', strtotime($appointment['data'])) . ".";
+    createNotification($appointment['tutor_id'], 'tutor', $notificationTutorMessage);
+
     // Email para o estudante
     $studentSubject = "Solicitação de agendamento enviada";
     $studentMessage = "
@@ -59,6 +63,8 @@ function notifyNewAppointment($appointment_id) {
         <p>Você receberá uma notificação quando o tutor responder à sua solicitação.</p>
     ";
 
+    // Não é necessário notificação in-app para o estudante aqui, pois ele receberá ao mudar o status
+
     // Enviar emails
     sendEmailNotification($appointment['tutor_email'], $tutorSubject, $tutorMessage);
     sendEmailNotification($appointment['estudante_email'], $studentSubject, $studentMessage);
@@ -71,8 +77,8 @@ function notifyAppointmentStatus($appointment_id, $status) {
     
     // Buscar informações do agendamento
     $stmt = $conn->prepare("
-        SELECT a.*, t.nome as tutor_nome, t.email as tutor_email,
-               e.nome as estudante_nome, e.email as estudante_email
+        SELECT a.*, t.nome as tutor_nome, t.email as tutor_email, t.id as tutor_id,
+               e.nome as estudante_nome, e.email as estudante_email, e.id as estudante_id
         FROM agendamentos a
         JOIN tutores t ON a.tutor_id = t.id
         JOIN estudantes e ON a.estudante_id = e.id
@@ -83,28 +89,105 @@ function notifyAppointmentStatus($appointment_id, $status) {
 
     if (!$appointment) return false;
 
-    $statusText = $status === 'confirmado' ? 'confirmada' : 'recusada';
-    
-    // Email para o estudante
-    $subject = "Solicitação de agendamento {$statusText}";
-    $message = "
-        <h2>Solicitação de agendamento {$statusText}</h2>
-        <p>Olá {$appointment['estudante_nome']},</p>
-        <p>Sua solicitação de agendamento foi {$statusText}:</p>
-        <ul>
-            <li><strong>Tutor:</strong> {$appointment['tutor_nome']}</li>
-            <li><strong>Data:</strong> " . date('d/m/Y', strtotime($appointment['data'])) . "</li>
-            <li><strong>Horário:</strong> {$appointment['horario_inicio']} - {$appointment['horario_termino']}</li>
-            <li><strong>Assunto:</strong> {$appointment['assunto']}</li>
-            <li><strong>Local:</strong> {$appointment['local']}</li>
-        </ul>
-    ";
+    $statusText = '';
+    $notificationMessage = '';
+    $subject = '';
+    $message = '';
 
-    if ($status === 'recusado') {
-        $message .= "<p>O tutor recusou sua solicitação. Por favor, tente agendar em outro horário.</p>";
-    } else {
-        $message .= "<p>O tutor confirmou sua solicitação. A sessão está agendada!</p>";
+    if ($status === 'confirmado') {
+        $statusText = 'confirmada';
+        $notificationMessage = "Sua sessão com " . htmlspecialchars($appointment['tutor_nome']) . " para o dia " . date('d/m/Y', strtotime($appointment['data'])) . " foi confirmada!";
+        $subject = "Solicitação de agendamento confirmada";
+        $message = "
+            <h2>Solicitação de agendamento confirmada</h2>
+            <p>Olá {$appointment['estudante_nome']},</p>
+            <p>Sua solicitação de agendamento com <strong>{$appointment['tutor_nome']}</strong> foi confirmada para:</p>
+            <ul>
+                <li><strong>Data:</strong> " . date('d/m/Y', strtotime($appointment['data'])) . "</li>
+                <li><strong>Horário:</strong> {$appointment['horario_inicio']} - {$appointment['horario_termino']}</li>
+                <li><strong>Assunto:</strong> {$appointment['assunto']}</li>
+                <li><strong>Local:</strong> {$appointment['local']}</li>
+            </ul>
+            <p>Prepare-se para a sua sessão!</p>
+        ";
+    } elseif ($status === 'recusado') {
+        $statusText = 'recusada';
+        $notificationMessage = "Sua solicitação de sessão com " . htmlspecialchars($appointment['tutor_nome']) . " para o dia " . date('d/m/Y', strtotime($appointment['data'])) . " foi recusada.";
+        $subject = "Solicitação de agendamento recusada";
+        $message = "
+            <h2>Solicitação de agendamento recusada</h2>
+            <p>Olá {$appointment['estudante_nome']},</p>
+            <p>Sua solicitação de agendamento com <strong>{$appointment['tutor_nome']}</strong> para:</p>
+            <ul>
+                <li><strong>Data:</strong> " . date('d/m/Y', strtotime($appointment['data'])) . "</li>
+                <li><strong>Horário:</strong> {$appointment['horario_inicio']} - {$appointment['horario_termino']}</li>
+                <li><strong>Assunto:</strong> {$appointment['assunto']}</li>
+                <li><strong>Local:</strong> {$appointment['local']}</li>
+            </ul>
+            <p>Foi recusada pelo tutor. Por favor, tente agendar em outro horário ou com outro tutor.</p>
+        ";
+    } elseif ($status === 'cancelado') {
+        $statusText = 'cancelada';
+        $notificationMessage = "Sua sessão com " . htmlspecialchars($appointment['tutor_nome']) . " para o dia " . date('d/m/Y', strtotime($appointment['data'])) . " foi cancelada.";
+        $subject = "Sessão de agendamento cancelada";
+        $message = "
+            <h2>Sessão de agendamento cancelada</h2>
+            <p>Olá {$appointment['estudante_nome']},</p>
+            <p>Sua sessão com <strong>{$appointment['tutor_nome']}</strong> para:</p>
+            <ul>
+                <li><strong>Data:</strong> " . date('d/m/Y', strtotime($appointment['data'])) . "</li>
+                <li><strong>Horário:</strong> {$appointment['horario_inicio']} - {$appointment['horario_termino']}</li>
+                <li><strong>Assunto:</strong> {$appointment['assunto']}</li>
+                <li><strong>Local:</strong> {$appointment['local']}</li>
+            </ul>
+            <p>Foi cancelada. Por favor, verifique o sistema para mais detalhes.</p>
+        ";
+        // Enviar notificação também para o tutor se o estudante cancelar
+        createNotification($appointment['tutor_id'], 'tutor', "A sessão com " . htmlspecialchars($appointment['estudante_nome']) . " para o dia " . date('d/m/Y', strtotime($appointment['data'])) . " foi cancelada.");
     }
 
-    return sendEmailNotification($appointment['estudante_email'], $subject, $message);
+    if (!empty($notificationMessage)) {
+        createNotification($appointment['estudante_id'], 'estudante', $notificationMessage);
+    }
+
+    if (!empty($subject) && !empty($message)) {
+        return sendEmailNotification($appointment['estudante_email'], $subject, $message);
+    } else {
+        return false; // Não há email para enviar se o status não for 'confirmado', 'recusado' ou 'cancelado'
+    }
+}
+
+// Função para buscar notificações de um usuário
+function getUserNotifications($userId, $userType, $limit = 10, $offset = 0) {
+    global $conn;
+    try {
+        $stmt = $conn->prepare("
+            SELECT id, message, is_read, created_at
+            FROM notifications
+            WHERE user_id = ? AND user_type = ?
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        ");
+        $stmt->bindValue(1, $userId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $userType, PDO::PARAM_STR);
+        $stmt->bindValue(3, $limit, PDO::PARAM_INT);
+        $stmt->bindValue(4, $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    } catch (PDOException $e) {
+        error_log("Erro ao buscar notificações: " . $e->getMessage());
+        return [];
+    }
+}
+
+// Função para marcar notificação como lida
+function markNotificationAsRead($notificationId, $userId, $userType) {
+    global $conn;
+    try {
+        $stmt = $conn->prepare("UPDATE notifications SET is_read = TRUE WHERE id = ? AND user_id = ? AND user_type = ?");
+        return $stmt->execute([$notificationId, $userId, $userType]);
+    } catch (PDOException $e) {
+        error_log("Erro ao marcar notificação como lida: " . $e->getMessage());
+        return false;
+    }
 } 

@@ -1,6 +1,7 @@
 <?php
 require_once 'config.php';
 require_once 'functions.php';
+require_once 'notifications.php'; // Incluindo para usar getUserNotifications, se necessário
 requireAuth();
 
 $conn = getDBConnection();
@@ -21,7 +22,7 @@ if ($user_type === 'tutor') {
     $stmt->execute([$user_id]);
     $areas = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-    // Buscar agendamentos futuros
+    // Buscar agendamentos futuros (tutores)
     $stmt = $conn->prepare("
         SELECT a.*, e.nome as estudante_nome, e.curso as estudante_curso
         FROM agendamentos a
@@ -43,8 +44,12 @@ if ($user_type === 'tutor') {
     ");
     $stmt->execute([$user_id]);
     $avaliacoes = $stmt->fetch();
+
+    // Buscar notificações não lidas para o tutor
+    $notifications = getUserNotifications($user_id, $user_type, 5); // Buscar as 5 últimas
+
 } else {
-    // Buscar agendamentos futuros
+    // Buscar agendamentos futuros (estudantes)
     $stmt = $conn->prepare("
         SELECT a.*, t.nome as tutor_nome
         FROM agendamentos a
@@ -57,14 +62,68 @@ if ($user_type === 'tutor') {
     $stmt->execute([$user_id]);
     $agendamentos = $stmt->fetchAll();
 
-    // Buscar total de sessões concluídas
-    $stmt = $conn->prepare("
-        SELECT COUNT(*) as total
-        FROM agendamentos
-        WHERE estudante_id = ? AND status = 'concluido'
+    // Buscar sessões concluídas que ainda não foram avaliadas pelo estudante
+    $stmt_avaliar = $conn->prepare("
+        SELECT ag.id, ag.data, ag.horario_inicio, ag.horario_termino, ag.assunto, t.nome as tutor_nome
+        FROM agendamentos ag
+        JOIN tutores t ON ag.tutor_id = t.id
+        WHERE ag.estudante_id = ? AND ag.status = 'concluido'
+        AND NOT EXISTS (
+            SELECT 1 FROM avaliacoes av WHERE av.agendamento_id = ag.id
+        )
+        ORDER BY ag.data DESC
+        LIMIT 5
     ");
-    $stmt->execute([$user_id]);
-    $sessoes = $stmt->fetch();
+    $stmt_avaliar->execute([$user_id]);
+    $sessoes_para_avaliar = $stmt_avaliar->fetchAll();
+
+    // Buscar estatísticas do estudante
+    $stmt_stats = $conn->prepare("
+        SELECT 
+            COUNT(CASE WHEN status = 'agendado' THEN 1 END) as agendadas,
+            COUNT(CASE WHEN status = 'concluido' THEN 1 END) as concluidas,
+            COUNT(CASE WHEN status = 'cancelado' THEN 1 END) as canceladas
+        FROM agendamentos 
+        WHERE estudante_id = ?
+    ");
+    $stmt_stats->execute([$user_id]);
+    $estatisticas = $stmt_stats->fetch();
+
+    // Buscar histórico de sessões
+    $stmt_historico = $conn->prepare("
+        SELECT a.*, t.nome as tutor_nome, av.nota, av.comentario
+        FROM agendamentos a
+        JOIN tutores t ON a.tutor_id = t.id
+        LEFT JOIN avaliacoes av ON a.id = av.agendamento_id
+        WHERE a.estudante_id = ? AND a.status = 'concluido'
+        ORDER BY a.data DESC, a.horario_inicio DESC
+        LIMIT 5
+    ");
+    $stmt_historico->execute([$user_id]);
+    $historico_sessoes = $stmt_historico->fetchAll();
+
+    // Buscar áreas de interesse do estudante
+    $stmt_areas = $conn->prepare("
+        SELECT a.nome
+        FROM areas a
+        JOIN areas_estudante ae ON a.id = ae.area_id
+        WHERE ae.estudante_id = ?
+        ORDER BY a.nome
+    ");
+    $stmt_areas->execute([$user_id]);
+    $areas_interesse = $stmt_areas->fetchAll(PDO::FETCH_COLUMN);
+
+    // Buscar notificações não lidas para o estudante
+    $notifications = getUserNotifications($user_id, $user_type, 5);
+}
+
+// Processar marcação de notificação como lida
+if (isset($_GET['mark_read']) && isset($_GET['notification_id'])) {
+    $notificationId = (int)$_GET['notification_id'];
+    markNotificationAsRead($notificationId, $user_id, $user_type);
+    // Redirecionar para limpar os parâmetros da URL
+    header('Location: dashboard.php');
+    exit;
 }
 ?>
 
@@ -353,6 +412,105 @@ if ($user_type === 'tutor') {
                 grid-template-columns: 1fr;
             }
         }
+
+        .notification-item {
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .notification-item.read {
+            background-color: #e9e9e9;
+            color: #777;
+        }
+        .notification-item .message {
+            flex-grow: 1;
+        }
+        .notification-item .timestamp {
+            font-size: 0.8em;
+            color: #999;
+            margin-left: 15px;
+        }
+        .notification-item .mark-read-btn {
+            background: none;
+            border: none;
+            color: var(--primary-orange);
+            cursor: pointer;
+            font-weight: bold;
+            margin-left: 15px;
+        }
+        .notification-item .mark-read-btn:hover {
+            text-decoration: underline;
+        }
+
+        /* New styles for student dashboard layout */
+        .dashboard-section {
+            margin-top: 2rem;
+            padding: 2rem;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 240, 214, 0.9) 100%);
+            border-radius: 20px;
+            box-shadow: 0 8px 25px var(--shadow);
+            border: 2px solid rgba(232, 146, 74, 0.2);
+        }
+
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .stat-card {
+            padding: 1.5rem;
+            text-align: center;
+            background: var(--warm-cream);
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border: 1px solid rgba(232, 146, 74, 0.1);
+        }
+
+        .stat-card h3 {
+            font-size: 1.2rem;
+            color: var(--brown);
+            margin-bottom: 0.8rem;
+        }
+
+        .stat-number-small {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-orange);
+        }
+
+        .collapsible-header {
+            cursor: pointer;
+            background: linear-gradient(90deg, var(--warm-green) 0%, var(--dark-green) 100%);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 15px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: background 0.3s ease;
+        }
+
+        .collapsible-header:hover {
+            background: linear-gradient(90deg, var(--dark-green) 0%, var(--warm-green) 100%);
+        }
+
+        .collapsible-header .arrow {
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .collapsible-content {
+            padding: 1rem 0;
+        }
     </style>
 </head>
 <body>
@@ -379,109 +537,162 @@ if ($user_type === 'tutor') {
         <div class="card">
             <h1 class="dashboard-title">Bem-vindo(a), <?php echo htmlspecialchars($user_name); ?>!</h1>
 
+            <?php if (!empty($notifications)): ?>
+                <div class="card" style="margin-top: 2rem;">
+                    <h3>Suas Notificações</h3>
+                    <?php foreach ($notifications as $notification): ?>
+                        <div class="notification-item <?php echo $notification['is_read'] ? 'read' : ''; ?>">
+                            <span class="message"><?php echo htmlspecialchars($notification['message']); ?></span>
+                            <span class="timestamp"><?php echo date('d/m/Y H:i', strtotime($notification['created_at'])); ?></span>
+                            <?php if (!$notification['is_read']): ?>
+                                <a href="dashboard.php?mark_read=true&notification_id=<?php echo $notification['id']; ?>" class="mark-read-btn">Marcar como Lida</a>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
             <?php if ($user_type === 'tutor'): ?>
-                <div class="grid grid-3" style="margin-bottom: 30px;">
+                <div class="grid grid-3">
                     <div class="card">
-                        <h3>Áreas de Atuação</h3>
-                        <p class="stat"><?php echo count($areas); ?></p>
-                        <a href="gerenciar_areas.php" class="btn btn-secondary" style="width: 100%;">
-                            Gerenciar Áreas
-                        </a>
+                        <h2>Áreas de Atuação</h2>
+                        <div class="stat-number">
+                            <?php if (empty($areas)): ?>
+                                Nenhuma
+                            <?php else: ?>
+                                <?php echo count($areas); ?>
+                            <?php endif; ?>
+                        </div>
+                        <div class="action-buttons">
+                            <a href="gerenciar_areas.php" class="btn">
+                                Gerenciar Áreas
+                            </a>
+                        </div>
                     </div>
+
                     <div class="card">
-                        <h3>Média de Avaliações</h3>
-                        <p class="stat"><?php echo $avaliacoes['media'] ? number_format($avaliacoes['media'], 1) : '0.0'; ?>/5</p>
-                        <p style="text-align: center; color: var(--text-color);">
-                            <?php echo $avaliacoes['total']; ?> avaliações
-                        </p>
+                        <h2>Média de Avaliações</h2>
+                        <div class="stat-number">
+                            <a href="ver_avaliacoes_tutor.php" style="text-decoration: none; color: inherit;">
+                                <?php echo number_format($avaliacoes['media'] ?? 0, 1); ?>/5
+                                <?php if (($avaliacoes['total'] ?? 0) > 0): ?>
+                                    (<?php echo $avaliacoes['total']; ?> avaliações)
+                                <?php endif; ?>
+                            </a>
+                        </div>
+                        <div class="action-buttons">
+                             <a href="ver_avaliacoes_tutor.php" class="btn">
+                                Ver Avaliações
+                            </a>
+                        </div>
                     </div>
+
                     <div class="card">
-                        <h3>Próximos Agendamentos</h3>
-                        <p class="stat"><?php echo count($agendamentos); ?></p>
-                        <a href="gerenciar_agendamentos.php" class="btn btn-secondary" style="width: 100%;">
-                            Ver Todos
-                        </a>
+                        <h2>Próximos Agendamentos</h2>
+                        <div class="stat-number">
+                            <?php echo count($agendamentos); ?>
+                        </div>
+                        <div class="action-buttons">
+                            <a href="gerenciar_agendamentos.php" class="btn">
+                                Ver Todos
+                            </a>
+                        </div>
                     </div>
                 </div>
+            <?php endif; ?>
 
-                <?php if (!empty($areas)): ?>
-                    <div class="card" style="margin-bottom: 30px;">
-                        <h3>Suas Áreas de Atuação</h3>
-                        <div class="grid grid-3">
-                            <?php foreach ($areas as $area): ?>
-                                <div class="card">
-                                    <p style="text-align: center;"><?php echo htmlspecialchars($area); ?></p>
-                                </div>
-                            <?php endforeach; ?>
+            <?php if ($user_type === 'estudante'): ?>
+                <div class="dashboard-section">
+                    <h2>Suas Estatísticas</h2>
+                    <div class="grid grid-3 stats-summary">
+                        <div class="card stat-card">
+                            <h3>Agendadas</h3>
+                            <p class="stat-number-small"><?php echo $estatisticas['agendadas']; ?></p>
                         </div>
-                    </div>
-                <?php endif; ?>
-
-                <?php if (!empty($agendamentos)): ?>
-                    <div class="card">
-                        <h3>Próximos Agendamentos</h3>
-                        <div class="grid grid-1">
-                            <?php foreach ($agendamentos as $agendamento): ?>
-                                <div class="card appointment-card">
-                                    <div class="grid grid-2">
-                                        <div>
-                                            <h4><?php echo htmlspecialchars($agendamento['assunto']); ?></h4>
-                                            <p><strong>Estudante:</strong> <?php echo htmlspecialchars($agendamento['estudante_nome']); ?></p>
-                                            <p><strong>Curso:</strong> <?php echo htmlspecialchars($agendamento['estudante_curso']); ?></p>
-                                            <p><strong>Data:</strong> <?php echo date('d/m/Y', strtotime($agendamento['data'])); ?></p>
-                                            <p><strong>Horário:</strong> 
-                                                <?php echo date('H:i', strtotime($agendamento['horario_inicio'])); ?> - 
-                                                <?php echo date('H:i', strtotime($agendamento['horario_termino'])); ?>
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p><strong>Descrição:</strong></p>
-                                            <p><?php echo nl2br(htmlspecialchars($agendamento['descricao'])); ?></p>
-                                        </div>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
+                        <div class="card stat-card">
+                            <h3>Concluídas</h3>
+                            <p class="stat-number-small"><?php echo $estatisticas['concluidas']; ?></p>
                         </div>
-                    </div>
-                <?php endif; ?>
-            <?php else: ?>
-                <div class="grid grid-2" style="margin-bottom: 30px;">
-                    <div class="card">
-                        <h3>Total de Sessões</h3>
-                        <p class="stat"><?php echo $sessoes['total']; ?></p>
-                    </div>
-                    <div class="card">
-                        <h3>Próximos Agendamentos</h3>
-                        <p class="stat"><?php echo count($agendamentos); ?></p>
+                        <div class="card stat-card">
+                            <h3>Canceladas</h3>
+                            <p class="stat-number-small"><?php echo $estatisticas['canceladas']; ?></p>
+                        </div>
                     </div>
                 </div>
 
                 <?php if (!empty($agendamentos)): ?>
-                    <div class="card">
-                        <h3>Próximos Agendamentos</h3>
-                        <div class="grid grid-1">
+                    <div class="card" style="margin-top: 2rem;">
+                        <h2>Próximas Sessões</h2>
+                        <div class="grid">
                             <?php foreach ($agendamentos as $agendamento): ?>
                                 <div class="card appointment-card">
-                                    <div class="grid grid-2">
-                                        <div>
-                                            <h4><?php echo htmlspecialchars($agendamento['assunto']); ?></h4>
-                                            <p><strong>Tutor:</strong> <?php echo htmlspecialchars($agendamento['tutor_nome']); ?></p>
-                                            <p><strong>Data:</strong> <?php echo date('d/m/Y', strtotime($agendamento['data'])); ?></p>
-                                            <p><strong>Horário:</strong> 
-                                                <?php echo date('H:i', strtotime($agendamento['horario_inicio'])); ?> - 
-                                                <?php echo date('H:i', strtotime($agendamento['horario_termino'])); ?>
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p><strong>Descrição:</strong></p>
-                                            <p><?php echo nl2br(htmlspecialchars($agendamento['descricao'])); ?></p>
-                                        </div>
-                                    </div>
+                                    <h3><?php echo htmlspecialchars($agendamento['assunto']); ?></h3>
+                                    <p><strong>Tutor:</strong> <?php echo htmlspecialchars($agendamento['tutor_nome']); ?></p>
+                                    <p><strong>Data:</strong> <?php echo date('d/m/Y', strtotime($agendamento['data'])); ?></p>
+                                    <p><strong>Horário:</strong> 
+                                        <?php echo date('H:i', strtotime($agendamento['horario_inicio'])); ?> - 
+                                        <?php echo date('H:i', strtotime($agendamento['horario_termino'])); ?>
+                                    </p>
                                 </div>
                             <?php endforeach; ?>
                         </div>
                     </div>
                 <?php endif; ?>
+
+                <?php if (!empty($sessoes_para_avaliar)): ?>
+                    <div class="card" style="margin-top: 2rem;">
+                        <h2>Sessões Concluídas para Avaliar</h2>
+                        <div class="grid">
+                            <?php foreach ($sessoes_para_avaliar as $sessao): ?>
+                                <div class="card appointment-card">
+                                    <h3><?php echo htmlspecialchars($sessao['assunto']); ?></h3>
+                                    <p><strong>Tutor:</strong> <?php echo htmlspecialchars($sessao['tutor_nome']); ?></p>
+                                    <p><strong>Data:</strong> <?php echo date('d/m/Y', strtotime($sessao['data'])); ?></p>
+                                    <p><strong>Horário:</strong> 
+                                        <?php echo date('H:i', strtotime($sessao['horario_inicio'])); ?> - 
+                                        <?php echo date('H:i', strtotime($sessao['horario_termino'])); ?>
+                                    </p>
+                                    <a href="avaliar.php?id=<?php echo $sessao['id']; ?>" class="btn">
+                                        Avaliar Sessão
+                                    </a>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
+                <div class="card" style="margin-top: 2rem;">
+                    <h2 class="collapsible-header" id="historyHeader">Histórico de Sessões <span class="arrow">&#9660;</span></h2>
+                    <div class="collapsible-content" id="historyContent" style="display: none;">
+                        <?php if (empty($historico_sessoes)): ?>
+                            <p>Nenhuma sessão concluída.</p>
+                        <?php else: ?>
+                            <div class="grid">
+                                <?php foreach ($historico_sessoes as $sessao): ?>
+                                    <div class="card appointment-card">
+                                        <h3><?php echo htmlspecialchars($sessao['assunto']); ?></h3>
+                                        <p><strong>Tutor:</strong> <?php echo htmlspecialchars($sessao['tutor_nome']); ?></p>
+                                        <p><strong>Data:</strong> <?php echo date('d/m/Y', strtotime($sessao['data'])); ?></p>
+                                        <p><strong>Horário:</strong> 
+                                            <?php echo date('H:i', strtotime($sessao['horario_inicio'])); ?> - 
+                                            <?php echo date('H:i', strtotime($sessao['horario_termino'])); ?>
+                                        </p>
+                                        <?php if ($sessao['nota']): ?>
+                                            <p><strong>Avaliação:</strong> <?php echo $sessao['nota']; ?>/5</p>
+                                            <?php if ($sessao['comentario']): ?>
+                                                <p><strong>Comentário:</strong> <?php echo htmlspecialchars($sessao['comentario']); ?></p>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <a href="avaliar.php?id=<?php echo $sessao['id']; ?>" class="btn">
+                                                Avaliar Sessão
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
 
                 <div class="card" style="margin-top: 30px; text-align: center;">
                     <h3>Precisa de ajuda?</h3>
@@ -490,6 +701,21 @@ if ($user_type === 'tutor') {
                         Buscar Tutores
                     </a>
                 </div>
+
+                <script>
+                    document.getElementById('historyHeader').addEventListener('click', function() {
+                        var content = document.getElementById('historyContent');
+                        var arrow = this.querySelector('.arrow');
+                        if (content.style.display === 'none') {
+                            content.style.display = 'block';
+                            arrow.innerHTML = '&#9650;'; // Seta para cima
+                        } else {
+                            content.style.display = 'none';
+                            arrow.innerHTML = '&#9660;'; // Seta para baixo
+                        }
+                    });
+                </script>
+
             <?php endif; ?>
         </div>
     </div>

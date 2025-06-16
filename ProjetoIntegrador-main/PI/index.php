@@ -125,51 +125,59 @@ require_once 'config.php';
         .nav-links {
             display: flex;
             gap: 1.5rem;
+            align-items: flex-end;
+        }
+
+        .login-button {
+            color: white;
+            text-decoration: none;
+            padding: 0.8rem 1.8rem;
+            border-radius: 30px;
+            background: var(--primary-orange);
+            transition: all 0.3s ease;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
             align-items: center;
+            text-align: center;
+            white-space: normal;
         }
 
         .nav-link {
             color: white;
             text-decoration: none;
-            padding: 0.8rem 1.8rem;
+            padding: 1.5rem 1.8rem;
             border-radius: 30px;
-            background: rgba(255, 255, 255, 0.15);
+            background: var(--primary-orange);
             transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
             font-weight: 600;
             letter-spacing: 0.5px;
             text-transform: uppercase;
             font-size: 0.9rem;
-            position: relative;
-            overflow: hidden;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            white-space: nowrap;
         }
 
-        .nav-link::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(
-                90deg,
-                transparent,
-                rgba(255, 255, 255, 0.2),
-                transparent
-            );
-            transition: 0.5s;
-        }
-
-        .nav-link:hover::before {
-            left: 100%;
-        }
-
-        .nav-link:hover {
-            background: rgba(255, 255, 255, 0.25);
+        .nav-link:hover, .login-button:hover {
+            background: var(--secondary-orange);
             transform: translateY(-2px);
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .login-buttons {
+            display: flex;
+            gap: 1rem;
         }
 
         .container {
@@ -428,7 +436,10 @@ require_once 'config.php';
                 <?php echo SITE_NAME; ?>
             </a>
             <div class="nav-links">
-                <a href="login.php?type=estudante" class="nav-link">Entrar</a>
+                <div class="login-buttons">
+                    <a href="login.php?type=estudante" class="login-button">Entrar como Estudante</a>
+                    <a href="login.php?type=tutor" class="login-button">Entrar como Tutor</a>
+                </div>
                 <a href="register.php?type=estudante" class="nav-link">Cadastrar</a>
             </div>
         </div>

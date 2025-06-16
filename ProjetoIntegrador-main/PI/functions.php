@@ -176,4 +176,22 @@ function baseUrl() {
     $host = $_SERVER['HTTP_HOST'];
     $base = dirname($_SERVER['PHP_SELF']);
     return "$protocol://$host$base";
+}
+
+/**
+ * Cria uma notificação no banco de dados para um usuário específico
+ * @param int $userId ID do usuário receptor da notificação
+ * @param string $userType Tipo do usuário (estudante, tutor, coordenador)
+ * @param string $message Conteúdo da notificação
+ * @return bool True se a notificação foi criada com sucesso, false caso contrário
+ */
+function createNotification($userId, $userType, $message) {
+    $conn = getDBConnection();
+    try {
+        $stmt = $conn->prepare("INSERT INTO notifications (user_id, user_type, message) VALUES (?, ?, ?)");
+        return $stmt->execute([$userId, $userType, $message]);
+    } catch (PDOException $e) {
+        error_log("Erro ao criar notificação: " . $e->getMessage());
+        return false;
+    }
 } 

@@ -1,7 +1,8 @@
 <?php
 require_once 'config.php';
+require_once 'functions.php';
 
-$type = isset($_GET['type']) ? $_GET['type'] : 'student';
+$type = isset($_GET['type']) ? $_GET['type'] : 'estudante';
 $error = '';
 $success = '';
 

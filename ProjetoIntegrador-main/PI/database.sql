@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS sistema_tutoria;
-USE sistema_tutoria;
+CREATE DATABASE IF NOT EXISTS pi_db;
+USE pi_db;
 
 CREATE TABLE IF NOT EXISTS areas (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -8,20 +8,16 @@ CREATE TABLE IF NOT EXISTS areas (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-
 CREATE TABLE IF NOT EXISTS tutores (
-    id INT PRIMARY KEY AUTO_INCREMENT,
+    id INT AUTO_INCREMENT PRIMARY KEY,
     nome VARCHAR(100) NOT NULL,
     email VARCHAR(100) NOT NULL UNIQUE,
-    telefone VARCHAR(20) NOT NULL,
     senha VARCHAR(255) NOT NULL,
-    dia_semana ENUM('Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado', 'Domingo') NOT NULL,
-    horario_inicio TIME NOT NULL,
-    horario_termino TIME NOT NULL,
+    telefone VARCHAR(20) NOT NULL,
+    area_atuacao VARCHAR(100) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
-
 
 CREATE TABLE IF NOT EXISTS areas_tutor (
     tutor_id INT,
@@ -32,41 +28,41 @@ CREATE TABLE IF NOT EXISTS areas_tutor (
 );
 
 CREATE TABLE IF NOT EXISTS estudantes (
-    id INT PRIMARY KEY AUTO_INCREMENT,
+    id INT AUTO_INCREMENT PRIMARY KEY,
     nome VARCHAR(100) NOT NULL,
     email VARCHAR(100) NOT NULL UNIQUE,
-    curso VARCHAR(100) NOT NULL,
-    matricula VARCHAR(20) NOT NULL UNIQUE,
     senha VARCHAR(255) NOT NULL,
+    matricula VARCHAR(20) NOT NULL UNIQUE,
+    curso VARCHAR(100) NOT NULL,
+    semestre INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS agendamentos (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    tutor_id INT NOT NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
     estudante_id INT NOT NULL,
-    data DATE NOT NULL,
-    horario_inicio TIME NOT NULL,
-    horario_termino TIME NOT NULL,
-    local VARCHAR(255),
-    link_videoconferencia VARCHAR(255),
-    assunto VARCHAR(255) NOT NULL,
-    descricao TEXT,
-    status ENUM('pendente', 'confirmado', 'cancelado', 'concluido') DEFAULT 'pendente',
+    tutor_id INT NOT NULL,
+    data_hora DATETIME NOT NULL,
+    status ENUM('pendente', 'confirmado', 'cancelado', 'concluido') NOT NULL DEFAULT 'pendente',
+    observacoes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (tutor_id) REFERENCES tutores(id) ON DELETE CASCADE,
-    FOREIGN KEY (estudante_id) REFERENCES estudantes(id) ON DELETE CASCADE
+    FOREIGN KEY (estudante_id) REFERENCES estudantes(id) ON DELETE CASCADE,
+    FOREIGN KEY (tutor_id) REFERENCES tutores(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS avaliacoes (
     id INT PRIMARY KEY AUTO_INCREMENT,
     agendamento_id INT NOT NULL,
+    tutor_id INT NOT NULL,
+    estudante_id INT NOT NULL,
     nota INT NOT NULL CHECK (nota >= 1 AND nota <= 5),
     comentario TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (agendamento_id) REFERENCES agendamentos(id) ON DELETE CASCADE
+    FOREIGN KEY (agendamento_id) REFERENCES agendamentos(id) ON DELETE CASCADE,
+    FOREIGN KEY (tutor_id) REFERENCES tutores(id) ON DELETE CASCADE,
+    FOREIGN KEY (estudante_id) REFERENCES estudantes(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS solicitacoes_tutoria (
@@ -82,15 +78,51 @@ CREATE TABLE IF NOT EXISTS solicitacoes_tutoria (
     FOREIGN KEY (tutor_id) REFERENCES tutores(id) ON DELETE CASCADE
 );
 
-ALTER TABLE agendamentos
-ADD COLUMN local VARCHAR(255) AFTER horario_termino,
-ADD COLUMN link_videoconferencia VARCHAR(255) AFTER local,
-ADD COLUMN solicitacao_id INT AFTER estudante_id,
-ADD FOREIGN KEY (solicitacao_id) REFERENCES solicitacoes_tutoria(id) ON DELETE SET NULL;
+CREATE TABLE IF NOT EXISTS notificacoes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    tipo_usuario ENUM('estudante', 'tutor', 'coordenador') NOT NULL,
+    mensagem TEXT NOT NULL,
+    lida BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES estudantes(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(100) NOT NULL,
+    token VARCHAR(255) NOT NULL,
+    tipo_usuario ENUM('estudante', 'tutor', 'coordenador') NOT NULL,
+    expiracao DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS coordenadores (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    senha VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
 
 INSERT INTO areas (nome) VALUES
 ('Prática de Programação 1'),
 ('Qualidade de Software'),
 ('Sistemas Operacionais'),
 ('Estrutura de Dados'),
-('Banco de Dados 1'); 
+('Banco de Dados 1');
+
+INSERT INTO coordenadores (nome, email, senha) VALUES 
+('Coordenador Teste', 'coordenador@teste.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi');
+
+INSERT INTO tutores (nome, email, senha, telefone, area_atuacao) VALUES 
+('Tutor Teste', 'tutor@teste.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '(11) 99999-9999', 'Matemática');
+
+INSERT INTO estudantes (nome, email, senha, matricula, curso, semestre) VALUES 
+('Estudante Teste', 'estudante@teste.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', '2023001', 'Ciência da Computação', 1);
+
+CREATE INDEX idx_agendamentos_data_hora ON agendamentos(data_hora);
+CREATE INDEX idx_agendamentos_status ON agendamentos(status);
+CREATE INDEX idx_notificacoes_usuario ON notificacoes(usuario_id, tipo_usuario);
+CREATE INDEX idx_password_reset_tokens ON password_reset_tokens(email, token); 

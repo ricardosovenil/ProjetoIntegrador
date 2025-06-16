@@ -30,7 +30,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             if ($conn) {
                 error_log("Conexão com o banco de dados estabelecida.");
-                $table = ($userType === 'tutor') ? 'tutores' : 'estudantes';
+                
+                $table = '';
+                switch ($userType) {
+                    case 'tutor':
+                        $table = 'tutores';
+                        break;
+                    case 'estudante':
+                        $table = 'estudantes';
+                        break;
+                    case 'coordenador':
+                        $table = 'coordenadores';
+                        break;
+                    default:
+                        $error = "Tipo de usuário inválido.";
+                        error_log("Erro de login: Tipo de usuário inválido: " . $userType);
+                        setFlashMessage('error', $error);
+                        header('Location: login.php');
+                        exit;
+                }
+
                 error_log("Buscando usuário na tabela: " . $table . " com email: " . $email);
 
                 $stmt = $conn->prepare("SELECT id, nome, senha, email FROM $table WHERE email = ?");
@@ -63,8 +82,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                         $stmt_log->closeCursor();
 
-                        error_log("Sessão definida para " . $userType . ". Redirecionando...");
-                        header('Location: dashboard.php');
+                        error_log("Sessão definida para " . $_SESSION['user_type'] . ". Redirecionando para: " . ($_SESSION['user_type'] === 'coordenador' ? 'dashboard_coordenador.php' : 'dashboard.php'));
+                        if ($userType === 'coordenador') {
+                            header('Location: dashboard_coordenador.php');
+                        } else {
+                            header('Location: dashboard.php'); // Redirecionamento padrão para estudante/tutor
+                        }
                         exit;
                     } else {
                         $error = "E-mail ou senha inválidos."; // Mensagem genérica por segurança
@@ -405,7 +428,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            placeholder="Digite sua senha">
                 </div>
 
-                <button type="submit" class="btn" style="width: 100%;">Entrar</button>
+                <div class="form-group">
+                    <button type="submit" class="btn">Entrar</button>
+                </div>
+                <div style="text-align: center; margin-top: 1rem;">
+                    <a href="redefinir_senha.php" style="color: var(--primary-orange); text-decoration: none; font-weight: bold;">
+                        Esqueci a senha?
+                    </a>
+                </div>
             </form>
 
             <div style="margin-top: 20px; text-align: center;">
