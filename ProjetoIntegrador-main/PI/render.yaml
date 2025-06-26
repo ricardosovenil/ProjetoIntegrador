@@ -3,6 +3,7 @@ services:
     name: ProjetoIntegrador
     env: docker
     plan: free
-    region: oregon 
+    region: oregon
     branch: main
-    dockerfilePath: .Dockerfile
+    rootDir: PI
+    dockerfilePath: ./Dockerfile
