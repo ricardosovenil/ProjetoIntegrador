@@ -5,5 +5,5 @@ services:
     plan: free
     region: oregon
     branch: main
-    rootDir: PI
-    dockerfilePath: ./Dockerfile
+    rootDir: ProjetoIntegrador-main/PI
+    dockerfilePath: ProjetoIntegrador-main/PI/Dockerfile
