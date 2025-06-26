@@ -6,4 +6,4 @@ services:
     region: oregon
     branch: main
     rootDir: ProjetoIntegrador-main/PI
-    dockerfilePath: ProjetoIntegrador-main/PI/Dockerfile
+    dockerfilePath: ProjetoIntegrador-main/PI/dockerfile
